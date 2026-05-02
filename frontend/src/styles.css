@@ -1,0 +1,152 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #e5eef9;
+  background:
+    radial-gradient(circle at top, rgba(84, 135, 255, 0.32), transparent 36%),
+    linear-gradient(160deg, #08111f 0%, #111b2f 52%, #0a1020 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 48px 20px;
+}
+
+.app-container {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+}
+
+.hero {
+  display: grid;
+  gap: 16px;
+  padding: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: rgba(10, 15, 28, 0.72);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.hero p {
+  max-width: 68ch;
+  margin: 0;
+  color: rgba(229, 238, 249, 0.78);
+  font-size: 1.02rem;
+}
+
+.panel {
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(9, 14, 24, 0.7);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.controls input,
+.controls select {
+  width: 100%;
+  padding: 12px 14px;
+  color: #e5eef9;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(229, 238, 249, 0.7);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  padding: 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card h3 {
+  margin: 0 0 8px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(84, 135, 255, 0.18);
+  border: 1px solid rgba(84, 135, 255, 0.28);
+  color: #d6e4ff;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 24px 16px;
+  }
+
+  .hero,
+  .panel {
+    padding: 20px;
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
+  }
+}

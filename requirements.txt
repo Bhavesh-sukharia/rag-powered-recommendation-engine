@@ -1,0 +1,12 @@
+# Core requirements for this project — adjust as needed
+numpy>=1.25
+pandas>=2.0
+scikit-learn>=1.2
+scipy>=1.10
+matplotlib>=3.7
+seaborn>=0.12
+jupyter>=1.0
+
+# Add any ML framework you use (uncomment one or both)
+# tensorflow>=2.14
+# torch>=2.1

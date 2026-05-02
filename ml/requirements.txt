@@ -1,0 +1,11 @@
+numpy>=1.25
+pandas>=2.0
+scikit-learn>=1.2
+scipy>=1.10
+sentence-transformers>=3.0
+faiss-cpu>=1.8
+transformers>=4.41
+torch>=2.2
+spacy>=3.7
+keybert>=0.8
+chromadb>=0.5

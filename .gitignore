@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+env/
+venv/
+/.venv
+
+# Jupyter
+.ipynb_checkpoints
+
+# Environment files
+.env
+.env.local
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Data artifacts
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Python build outputs
+.coverage
+htmlcov/
+.pytest_cache/
+
+# OS files
+Thumbs.db
+desktop.ini
