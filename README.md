@@ -6,6 +6,7 @@ Project layout
 
 - `backend/`: API service for recommendations, user preferences, auth, and RAG explanations.
 - `ml/`: collaborative filtering, content-based ranking, sentiment, and RAG utilities.
+- Filtered sparse users/items and standardized interaction data to improve collaborative filtering performance and reduce noise.
 - `frontend/`: React UI for browsing recommendations and requesting explanations.
 - `infra/`: Kubernetes and monitoring manifests.
 - `data/`: raw and processed datasets.
