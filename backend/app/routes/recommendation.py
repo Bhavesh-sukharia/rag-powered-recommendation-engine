@@ -1,0 +1,151 @@
+"""
+Recommendation routes.
+"""
+from fastapi import APIRouter, HTTPException
+from app.models.recommendation import RecommendationRequest, MovieRecommendation
+from app.models.movie import Movie
+from app.repositories.user_repository import UserRepository
+from app.repositories.movie_repository import MovieRepository
+from app.services.cb_service import CBService
+from app.services.cf_service import CFService
+from app.services.sentiment_service import SentimentService
+from app.core.database import db
+from app.utils.logger import get_logger
+
+router = APIRouter(
+    prefix="/api/recommendations",
+    tags=["recommendations"],
+)
+
+logger = get_logger(__name__)
+
+# Initialize services
+cb_service = CBService()
+cf_service = CFService()
+sentiment_service = SentimentService()
+
+
+@router.post("/")
+async def get_weighted_recommendations(request: RecommendationRequest):
+    """
+    Get weighted recommendations based on CB, CF, and sentiment scores.
+    
+    Request body:
+    {
+        "username": "user123",
+        "cb_weight": 0.33,
+        "cf_weight": 0.33,
+        "sentiment_weight": 0.34,
+    }
+    """
+    user_repo = UserRepository(db)
+    movie_repo = MovieRepository(db)
+    
+    # Get user by username
+    user = await user_repo.get_user_by_username(request.username)
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User '{request.username}' not found")
+    
+    user_id = int(user["id"].split("ObjectId(")[-1].rstrip(")")) if "ObjectId" in str(user["_id"]) else 1
+    
+    logger.info(
+        "Getting weighted recommendations for user=%s with weights: cb=%s, cf=%s, sentiment=%s",
+        request.username,
+        request.cb_weight,
+        request.cf_weight,
+        request.sentiment_weight,
+    )
+    
+    # Get scores from each service
+    cb_items, cb_scores = cb_service.get_recommendations(user_id, request.count * 2)
+    cf_items, cf_scores = cf_service.get_recommendations(user_id, request.count * 2)
+    sentiment_items, sentiment_scores = sentiment_service.get_recommendations(user_id, request.count * 2)
+    
+    # Create a combined score dictionary
+    combined_scores = {}
+    
+    # Add CB scores
+    for item_id, score in zip(cb_items, cb_scores):
+        if item_id not in combined_scores:
+            combined_scores[item_id] = {
+                "cb_score": 0.0,
+                "cf_score": 0.0,
+                "sentiment_score": 0.0,
+            }
+        combined_scores[item_id]["cb_score"] = score
+    
+    # Add CF scores
+    for item_id, score in zip(cf_items, cf_scores):
+        if item_id not in combined_scores:
+            combined_scores[item_id] = {
+                "cb_score": 0.0,
+                "cf_score": 0.0,
+                "sentiment_score": 0.0,
+            }
+        combined_scores[item_id]["cf_score"] = score
+    
+    # Add sentiment scores
+    for item_id, score in zip(sentiment_items, sentiment_scores):
+        if item_id not in combined_scores:
+            combined_scores[item_id] = {
+                "cb_score": 0.0,
+                "cf_score": 0.0,
+                "sentiment_score": 0.0,
+            }
+        combined_scores[item_id]["sentiment_score"] = score
+    
+    # Calculate weighted combined score
+    for item_id in combined_scores:
+        cb = combined_scores[item_id]["cb_score"]
+        cf = combined_scores[item_id]["cf_score"]
+        sentiment = combined_scores[item_id]["sentiment_score"]
+        
+        combined = (
+            cb * request.cb_weight +
+            cf * request.cf_weight +
+            sentiment * request.sentiment_weight
+        )
+        combined_scores[item_id]["combined_score"] = combined
+    
+    # Sort by combined score and get top N
+    sorted_items = sorted(
+        combined_scores.items(),
+        key=lambda x: x[1]["combined_score"],
+        reverse=True
+    )[:request.count]
+    
+    # Fetch movie details from database
+    movie_item_ids = [item_id for item_id, _ in sorted_items]
+    movies = await movie_repo.get_movies(movie_item_ids)
+    
+    # Create a lookup for movies by item_id
+    movies_by_item_id = {movie.get("item_id"): movie for movie in movies}
+    
+    # Build response
+    recommendations = []
+    for item_id, scores in sorted_items:
+        movie_data = movies_by_item_id.get(item_id)
+        if movie_data:
+            # Convert MongoDB ObjectId to string
+            movie_data["id"] = str(movie_data.get("_id", item_id))
+            movie_data.pop("_id", None)
+            
+            rec = MovieRecommendation(
+                movie=Movie(**movie_data),
+                combined_score=scores["combined_score"],
+                cb_score=scores["cb_score"],
+                cf_score=scores["cf_score"],
+                sentiment_score=scores["sentiment_score"],
+            )
+            recommendations.append(rec)
+    
+    logger.info(
+        "Returned %d recommendations for user=%s",
+        len(recommendations),
+        request.username,
+    )
+    
+    return {
+        "username": request.username,
+        "recommendations": recommendations,
+    }
