@@ -60,6 +60,21 @@ class UserRepository:
         except Exception:
             return []
 
+    async def count_users(self) -> int:
+        """Return total number of users in the collection."""
+        try:
+            return await self.collection.count_documents({})
+        except Exception:
+            return 0
+
+    async def delete_user(self, user_id: str) -> bool:
+        """Delete a user by id. Returns True if deleted."""
+        try:
+            result = await self.collection.delete_one({"_id": ObjectId(user_id)})
+            return result.deleted_count > 0
+        except Exception:
+            return False
+
     async def update_user_preferences(self, user_id: str, preferred_genres: list[str]) -> Optional[Dict]:
         """Update only the user's preferred genres."""
         try:

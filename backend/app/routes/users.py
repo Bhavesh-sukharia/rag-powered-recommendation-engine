@@ -24,7 +24,7 @@ class UserRatingRequest(BaseModel):
 class UserPreferencesRequest(BaseModel):
     preferred_genres: list[str] = Field(default_factory=list)
 
-@router.post("/")
+@router.post("")
 async def create_user(user_data: User):
     """Create a new user."""
     repo = UserRepository(db)
@@ -44,16 +44,6 @@ async def create_user(user_data: User):
 
 @router.put("/{user_id}")
 async def update_user(user_id: str, user_data: UserPreferencesRequest):
-    """Update only the user's genre preferences."""
-    repo = UserRepository(db)
-    updated_user = await repo.update_user_preferences(user_id, user_data.preferred_genres)
-    if not updated_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return updated_user
-
-
-@router.put("/{user_id}/preferences")
-async def update_user_preferences(user_id: str, user_data: UserPreferencesRequest):
     """Update only the user's genre preferences."""
     repo = UserRepository(db)
     updated_user = await repo.update_user_preferences(user_id, user_data.preferred_genres)
@@ -93,9 +83,24 @@ async def rate_movie(user_id: str, rating_data: UserRatingRequest):
     }
 
 
-@router.get("/")
+@router.get("")
 async def list_users(skip: int = 0, limit: int = 100):
     """List users with pagination."""
     repo = UserRepository(db)
     users = await repo.get_users(skip=skip, limit=limit)
-    return {"count": len(users), "users": users}
+    total = await repo.count_users()
+    return {"count": total, "users": users}
+
+
+@router.delete("/{user_id}")
+async def delete_user(user_id: str):
+    """Delete a user by id."""
+    repo = UserRepository(db)
+    if user_id == '1':
+        # Protect built-in admin/user 1 from deletion
+        raise HTTPException(status_code=400, detail="Cannot delete protected user")
+
+    success = await repo.delete_user(user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found or delete failed")
+    return {"message": "User deleted"}

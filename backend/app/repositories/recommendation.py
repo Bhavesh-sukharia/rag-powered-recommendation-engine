@@ -7,7 +7,6 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.movie_repository import MovieRepository
 from app.services.cb_service import CBService
 from app.services.cf_service import CFService
-from app.services.sentiment_service import SentimentService
 from app.core.database import db
 
 
@@ -20,14 +19,12 @@ class RecommendationRepository:
         self.movie_repo = MovieRepository(self.db)
         self.cb = CBService()
         self.cf = CFService()
-        self.sentiment = SentimentService()
 
     async def get_weighted_recommendations(
         self,
         username: str,
         cb_weight: float,
         cf_weight: float,
-        sentiment_weight: float,
         count: int = 10,
     ) -> Dict:
         """Return weighted recommendations for a username.
@@ -47,13 +44,12 @@ class RecommendationRepository:
 
         cb_items, cb_scores = self.cb.get_recommendations(user_numeric_id, candidate_count)
         cf_items, cf_scores = self.cf.get_recommendations(user_numeric_id, candidate_count)
-        sentiment_items, sentiment_scores = self.sentiment.get_recommendations(user_numeric_id, candidate_count)
 
         combined_scores: dict = {}
 
         def _ensure(item_id: int):
             if item_id not in combined_scores:
-                combined_scores[item_id] = {"cb_score": 0.0, "cf_score": 0.0, "sentiment_score": 0.0}
+                combined_scores[item_id] = {"cb_score": 0.0, "cf_score": 0.0}
 
         for item_id, score in zip(cb_items, cb_scores):
             _ensure(item_id)
@@ -63,15 +59,12 @@ class RecommendationRepository:
             _ensure(item_id)
             combined_scores[item_id]["cf_score"] = score
 
-        for item_id, score in zip(sentiment_items, sentiment_scores):
-            _ensure(item_id)
-            combined_scores[item_id]["sentiment_score"] = score
+        # sentiment scores removed from weighted combination (unused)
 
         for item_id, scores in combined_scores.items():
             cb = scores.get("cb_score", 0.0)
             cf = scores.get("cf_score", 0.0)
-            sentiment = scores.get("sentiment_score", 0.0)
-            combined = cb * cb_weight + cf * cf_weight + sentiment * sentiment_weight
+            combined = cb * cb_weight + cf * cf_weight
             scores["combined_score"] = combined
 
         sorted_items = sorted(combined_scores.items(), key=lambda x: x[1]["combined_score"], reverse=True)[:count]
@@ -94,7 +87,7 @@ class RecommendationRepository:
                 "combined_score": scores["combined_score"],
                 "cb_score": scores.get("cb_score", 0.0),
                 "cf_score": scores.get("cf_score", 0.0),
-                "sentiment_score": scores.get("sentiment_score", 0.0),
+                
             })
 
         return {"username": username, "recommendations": recommendations}

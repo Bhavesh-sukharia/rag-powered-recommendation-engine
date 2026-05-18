@@ -1,7 +1,8 @@
 """
 Movie data repository.
 """
-from typing import List, Optional, Dict
+import re
+from typing import Any, Dict, List, Optional
 from bson import ObjectId
 
 
@@ -63,8 +64,11 @@ class MovieRepository:
         try:
             movie = await self.collection.find_one({"item_id": item_id})
             if movie:
-                movie["id"] = str(movie["_id"])
-            return movie
+                movie_dict = dict(movie)
+                if "_id" in movie_dict:
+                    movie_dict["id"] = str(movie_dict.pop("_id"))
+                return movie_dict
+            return None
         except Exception:
             return None
     
@@ -73,8 +77,11 @@ class MovieRepository:
         try:
             movie = await self.collection.find_one({"title": title})
             if movie:
-                movie["id"] = str(movie["_id"])
-            return movie
+                movie_dict = dict(movie)
+                if "_id" in movie_dict:
+                    movie_dict["id"] = str(movie_dict.pop("_id"))
+                return movie_dict
+            return None
         except Exception:
             return None
     
@@ -83,8 +90,11 @@ class MovieRepository:
         try:
             movie = await self.collection.find_one({"_id": ObjectId(movie_id)})
             if movie:
-                movie["id"] = str(movie["_id"])
-            return movie
+                movie_dict = dict(movie)
+                if "_id" in movie_dict:
+                    movie_dict["id"] = str(movie_dict.pop("_id"))
+                return movie_dict
+            return None
         except Exception:
             return None
     
@@ -92,26 +102,74 @@ class MovieRepository:
         """Get multiple movies by IDs."""
         try:
             movies = await self.collection.find({"item_id": {"$in": movie_ids}}).to_list(None)
+            result = []
             for movie in movies:
-                movie["id"] = str(movie["_id"])
-            return movies
+                movie_dict = dict(movie)
+                if "_id" in movie_dict:
+                    movie_dict["id"] = str(movie_dict.pop("_id"))
+                result.append(movie_dict)
+            return result
         except Exception:
             return []
     
-    async def search_movies(self, query: str) -> List[Dict]:
-        """Search movies by title or description."""
+    async def search_movies(
+        self,
+        query: str,
+        page: int = 1,
+        limit: int = 20,
+        genre: Optional[str] = None,
+        sort: str = "rating",
+    ) -> Dict[str, Any]:
+        """Search movies by title, overview, and optional genre with pagination."""
         try:
-            movies = await self.collection.find({
-                "$or": [
-                    {"title": {"$regex": query, "$options": "i"}},
-                    {"overview": {"$regex": query, "$options": "i"}}
+            page = max(page, 1)
+            limit = max(limit, 1)
+            skip = (page - 1) * limit
+
+            criteria: Dict[str, Any] = {}
+            if query.strip():
+                escaped_query = re.escape(query.strip())
+                criteria["$or"] = [
+                    {"title": {"$regex": escaped_query, "$options": "i"}},
+                    {"genres": {"$regex": escaped_query, "$options": "i"}},
                 ]
-            }).to_list(None)
+
+            if genre and genre.strip():
+                criteria["genres"] = {"$regex": re.escape(genre.strip()), "$options": "i"}
+
+            if sort == "popularity":
+                sort_fields = [("rating_number", -1), ("avg_rating", -1), ("title", 1)]
+            elif sort == "rating":
+                sort_fields = [("avg_rating", -1), ("rating_number", -1), ("title", 1)]
+            else:
+                sort_fields = [("title", 1)]
+
+            total = await self.collection.count_documents(criteria)
+            cursor = self.collection.find(criteria).sort(sort_fields).skip(skip).limit(limit)
+            movies = await cursor.to_list(None)
+
+            result = []
             for movie in movies:
-                movie["id"] = str(movie["_id"])
-            return movies
+                movie_dict = dict(movie)
+                if "_id" in movie_dict:
+                    movie_dict["id"] = str(movie_dict.pop("_id"))
+                result.append(movie_dict)
+
+            return {
+                "movies": result,
+                "page": page,
+                "limit": limit,
+                "total": int(total),
+                "has_more": skip + len(result) < int(total),
+            }
         except Exception:
-            return []
+            return {
+                "movies": [],
+                "page": page,
+                "limit": limit,
+                "total": 0,
+                "has_more": False,
+            }
     
     async def get_movie_metadata(self, movie_id: int) -> Optional[Dict]:
         """Get movie metadata (year, categories, etc)."""
@@ -121,7 +179,34 @@ class MovieRepository:
                 {"genres": 1, "avg_rating": 1, "created_at": 1}
             )
             if movie:
-                movie["id"] = str(movie["_id"])
-            return movie
+                movie_dict = dict(movie)
+                if "_id" in movie_dict:
+                    movie_dict["id"] = str(movie_dict.pop("_id"))
+                return movie_dict
+            return None
         except Exception:
             return None
+
+    async def list_movies(self, skip: int = 0, limit: int = 10) -> List[Dict]:
+        """List movies with pagination."""
+        try:
+            movies = await self.collection.find().skip(skip).limit(limit).to_list(None)
+            result = []
+            for movie in movies:
+                # Convert ObjectId to string for JSON serialization
+                movie_dict = dict(movie)
+                if "_id" in movie_dict:
+                    movie_dict["id"] = str(movie_dict.pop("_id"))
+                result.append(movie_dict)
+            return result
+        except Exception:
+            return []
+
+    async def count_movies(self) -> int:
+        """Return the total number of movies in the collection."""
+        try:
+            # Use count_documents for an accurate count
+            count = await self.collection.count_documents({})
+            return int(count)
+        except Exception:
+            return 0

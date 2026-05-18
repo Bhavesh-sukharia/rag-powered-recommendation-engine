@@ -8,7 +8,6 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.movie_repository import MovieRepository
 from app.services.cb_service import CBService
 from app.services.cf_service import CFService
-from app.services.sentiment_service import SentimentService
 from app.core.database import db
 from app.utils.logger import get_logger
 
@@ -22,20 +21,22 @@ logger = get_logger(__name__)
 # Initialize services
 cb_service = CBService()
 cf_service = CFService()
-sentiment_service = SentimentService()
 
 
-@router.post("/")
+# sentiment bucketing removed: sentiment weight is not used
+
+
+@router.post("")
 async def get_weighted_recommendations(request: RecommendationRequest):
     """
-    Get weighted recommendations based on CB, CF, and sentiment scores.
+    Get weighted recommendations based on CB, CF.
     
     Request body:
     {
         "username": "user123",
-        "cb_weight": 0.33,
-        "cf_weight": 0.33,
-        "sentiment_weight": 0.34,
+        "cb_weight": 0.50,
+        "cf_weight": 0.50,
+        "count": 20
     }
     """
     user_repo = UserRepository(db)
@@ -49,17 +50,18 @@ async def get_weighted_recommendations(request: RecommendationRequest):
     user_id = int(user["id"].split("ObjectId(")[-1].rstrip(")")) if "ObjectId" in str(user["_id"]) else 1
     
     logger.info(
-        "Getting weighted recommendations for user=%s with weights: cb=%s, cf=%s, sentiment=%s",
+        "Getting weighted recommendations for user=%s with weights: cb=%s, cf=%s",
         request.username,
         request.cb_weight,
         request.cf_weight,
-        request.sentiment_weight,
     )
     
-    # Get scores from each service
-    cb_items, cb_scores = cb_service.get_recommendations(user_id, request.count * 2)
-    cf_items, cf_scores = cf_service.get_recommendations(user_id, request.count * 2)
-    sentiment_items, sentiment_scores = sentiment_service.get_recommendations(user_id, request.count * 2)
+    # Ensure we return at least 20 recommendations
+    count = max(request.count, 20)
+
+    # Get scores from each service (request more candidates than needed)
+    cb_items, cb_scores = cb_service.get_recommendations(user_id, count * 2)
+    cf_items, cf_scores = cf_service.get_recommendations(user_id, count * 2)
     
     # Create a combined score dictionary
     combined_scores = {}
@@ -67,52 +69,28 @@ async def get_weighted_recommendations(request: RecommendationRequest):
     # Add CB scores
     for item_id, score in zip(cb_items, cb_scores):
         if item_id not in combined_scores:
-            combined_scores[item_id] = {
-                "cb_score": 0.0,
-                "cf_score": 0.0,
-                "sentiment_score": 0.0,
-            }
+            combined_scores[item_id] = {"cb_score": 0.0, "cf_score": 0.0}
         combined_scores[item_id]["cb_score"] = score
     
     # Add CF scores
     for item_id, score in zip(cf_items, cf_scores):
         if item_id not in combined_scores:
-            combined_scores[item_id] = {
-                "cb_score": 0.0,
-                "cf_score": 0.0,
-                "sentiment_score": 0.0,
-            }
+            combined_scores[item_id] = {"cb_score": 0.0, "cf_score": 0.0}
         combined_scores[item_id]["cf_score"] = score
     
-    # Add sentiment scores
-    for item_id, score in zip(sentiment_items, sentiment_scores):
-        if item_id not in combined_scores:
-            combined_scores[item_id] = {
-                "cb_score": 0.0,
-                "cf_score": 0.0,
-                "sentiment_score": 0.0,
-            }
-        combined_scores[item_id]["sentiment_score"] = score
+    # sentiment scores removed from combination (unused)
     
     # Calculate weighted combined score
     for item_id in combined_scores:
         cb = combined_scores[item_id]["cb_score"]
         cf = combined_scores[item_id]["cf_score"]
-        sentiment = combined_scores[item_id]["sentiment_score"]
-        
-        combined = (
-            cb * request.cb_weight +
-            cf * request.cf_weight +
-            sentiment * request.sentiment_weight
-        )
+        combined = cb * request.cb_weight + cf * request.cf_weight
         combined_scores[item_id]["combined_score"] = combined
     
-    # Sort by combined score and get top N
+    # Sort by combined score
     sorted_items = sorted(
-        combined_scores.items(),
-        key=lambda x: x[1]["combined_score"],
-        reverse=True
-    )[:request.count]
+        combined_scores.items(), key=lambda x: x[1]["combined_score"], reverse=True
+    )[:count]
     
     # Fetch movie details from database
     movie_item_ids = [item_id for item_id, _ in sorted_items]
@@ -135,7 +113,6 @@ async def get_weighted_recommendations(request: RecommendationRequest):
                 combined_score=scores["combined_score"],
                 cb_score=scores["cb_score"],
                 cf_score=scores["cf_score"],
-                sentiment_score=scores["sentiment_score"],
             )
             recommendations.append(rec)
     
