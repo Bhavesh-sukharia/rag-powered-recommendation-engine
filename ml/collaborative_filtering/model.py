@@ -1,0 +1,401 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import pickle
+
+class DynamicNCF(nn.Module):
+    def __init__(self, num_items, embedding_dim=32):
+        super().__init__()
+
+        self.item_embedding = nn.Embedding(
+            num_items,
+            embedding_dim,
+            padding_idx=0
+        )
+
+        self.mlp = nn.Sequential(
+            nn.Linear(embedding_dim * 2, 128),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1)
+        )
+
+    def build_user_embedding(self, history_items, history_ratings):
+        """
+        Called ONCE to initialize embedding from history.
+        history_items:   (B, seq_len) long tensor
+        history_ratings: (B, seq_len) float tensor
+        Returns: user_embedding (B, dim), weight_sum (B, 1)
+        """
+        history_embeds = self.item_embedding(history_items)          # (B, seq, dim)
+        # mask = (history_items != 0).unsqueeze(-1)
+        weights  = (history_ratings).unsqueeze(-1)               # (B, seq, 1)
+        # weights = weights * mask
+        weight_sum     = history_ratings.sum(dim=1, keepdim=True)    # (B, 1)
+        # abs_weight_sum = (
+        #     weight.abs().sum(dim=1, keepdim=True)
+        # )
+        
+        mask           = (history_items != 0).unsqueeze(-1)          # (B, seq, 1)
+        weighted       = history_embeds * weights * mask             # (B, seq, dim)
+
+        user_embedding = weighted.sum(dim=1) / weight_sum.clamp(min=1e-6)  # (B, dim)
+
+        return user_embedding, weight_sum
+
+    # def build_user_embedding(
+    #     self,
+    #     history_items,
+    #     history_ratings
+    # ):
+    
+    #     history_embeds = self.item_embedding(
+    #         history_items
+    #     )
+    
+    #     mask = (
+    #         history_items != 0
+    #     ).unsqueeze(-1)
+    
+    #     weights = (
+    #         history_ratings - 3.0
+    #     ).unsqueeze(-1)
+    
+    #     weights = weights * mask
+    
+    #     weighted_embeds = (
+    #         history_embeds * weights
+    #     )
+    
+    #     embedding_sum = (
+    #         weighted_embeds.sum(dim=1)
+    #     )
+    
+    #     weight_sum = (
+    #         weights.abs()
+    #         .sum(dim=1)
+    #     )
+    
+    #     user_embedding = (
+    #         embedding_sum
+    #         /
+    #         weight_sum.clamp(min=1e-6)
+    #     )
+    
+    #     return (
+    #         user_embedding,
+    #         embedding_sum,
+    #         weight_sum
+    #     )
+
+    def update_user_embedding(self, user_embedding, weight_sum, new_item, new_rating):
+        """
+        Incrementally update a single user's embedding.
+        user_embedding: (1, dim)
+        weight_sum:     scalar or (1, 1)
+        new_item:       (1,) long tensor
+        new_rating:     float
+        Returns: updated user_embedding (1, dim), updated weight_sum
+        """
+        new_item_embed = self.item_embedding(new_item)               # (1, dim)
+        new_weight_sum = weight_sum + new_rating
+
+        user_embedding = (
+            user_embedding * weight_sum + new_item_embed * new_rating
+        ) / new_weight_sum.clamp(min=1e-6)
+
+        return user_embedding, new_weight_sum
+
+    # def update_user_embedding(
+    #     self,
+    #     embedding_sum,
+    #     weight_sum,
+    #     new_item,
+    #     new_rating
+    # ):
+    
+    #     new_item_embed = self.item_embedding(
+    #         new_item
+    #     )
+    
+    #     weight = new_rating - 3.0
+    
+    #     embedding_sum = (
+    #         embedding_sum
+    #         +
+    #         new_item_embed * weight
+    #     )
+    
+    #     weight_sum = (
+    #         weight_sum
+    #         +
+    #         abs(weight)
+    #     )
+    
+    #     user_embedding = (
+    #         embedding_sum
+    #         /
+    #         weight_sum.clamp(min=1e-6)
+    #     )
+    
+    #     return (
+    #         user_embedding,
+    #         embedding_sum,
+    #         weight_sum
+    #     )
+
+    def forward(self, user_embedding, target_items):
+        """
+        user_embedding: (B, dim) — pre-built, passed in
+        target_items:   (B,)    — item indices
+        """
+        target_embedding = self.item_embedding(target_items)         # (B, dim)
+        x = torch.cat([user_embedding, target_embedding], dim=1)
+        return 5.0 * torch.sigmoid(self.mlp(x).squeeze())    
+
+class RecommenderSystem:
+    def __init__(
+            self, 
+            model_path,
+            num_items,
+            item_to_index,
+            index_to_item,
+            user_histories,
+            user_embeddings=None,
+            embedding_dim=32,
+            device=None
+    ):
+        self.device = (
+            device if device is not None else torch.device(
+                "cuda" if torch.cuda.is_available() else "cpu"
+            )
+        )
+
+        self.item_to_index = item_to_index
+        self.index_to_item = index_to_item
+        self.user_histories = user_histories
+        self.user_embeddings = (
+            user_embeddings
+            if user_embeddings is not None
+            else {}
+        )
+        # self.item_id_to_title = item_id_to_title
+        self.num_items = num_items
+
+        self.model = DynamicNCF(num_items=num_items, embedding_dim=embedding_dim)
+
+        self.model.load_state_dict(
+            torch.load(model_path, map_location=self.device, weights_only=True)
+            )
+
+        self.model = self.model.to(self.device)
+
+        self.model.eval()
+
+        print("Model loaded successfully.")
+
+    # def build_user_embedding(self, user_id):
+    #     if user_id in self.user_embeddings:
+    #         embedding = self.user_embeddings[user_id]["embedding"]
+    #         return embedding.to(self.device)
+        
+
+    #     user_history = self.user_histories[user_id][-50:]
+
+    #     history_items = [x[0] for x in user_history]
+
+    #     history_ratings = [x[1] for x in user_history]
+
+    #     history_items_tensor = torch.tensor(history_items, dtype=torch.long).unsqueeze(0).to(self.device)
+    #     history_ratings_tensor = torch.tensor(history_ratings, dtype=torch.float32).unsqueeze(0).to(self.device)
+
+    #     with torch.inference_mode():
+    #         history_embeds = (self.model.item_embedding(history_items_tensor))
+    #         # history_embeds = F.normalize(history_embeds, dim=-1)
+
+    #         history_ratings_expanded = history_ratings_tensor.unsqueeze(-1)
+
+    #         weighted_history = history_embeds * history_ratings_expanded
+
+    #         # mask = (history_items_tensor != 0).unsqueeze(-1)
+
+    #         rating_sum = (history_ratings_expanded.sum(dim=1).clamp(min=1e-6))
+
+    #         user_embedding = weighted_history.sum(dim=1) / rating_sum
+
+
+    #     # cache the embedding
+    #     self.user_embeddings[user_id] = {
+    #         "embedding": user_embedding.detach().cpu(),
+    #         "count" : len(user_history)
+    #     }
+
+    #     return user_embedding
+    
+    # def update_user_embedding(self, user_id, item_id, rating):
+    #     item_idx = self.item_to_index[item_id]
+
+    #     item_tensor = torch.tensor([item_idx], dtype=torch.long).to(self.device)
+
+    #     with torch.inference_mode():
+    #         movie_embedding = self.model.item_embedding(item_tensor)
+
+    #         # movie_embedding = F.normalize(movie_embedding, dim=-1)
+
+
+    #     weighted_movie_embedding = rating * movie_embedding
+
+    #     # New user
+
+    #     if user_id not in self.user_embeddings:
+    #         self.user_embeddings[user_id] = {
+    #             "embedding": weighted_movie_embedding.detach().cpu(),
+    #             "count" : 1
+    #         }
+    #     else:
+    #         old_embedding = self.user_embeddings[user_id]["embedding"].to(self.device)
+    #         count = self.user_embeddings[user_id]["count"]
+    #         new_embedding = (count * old_embedding + weighted_movie_embedding) / (count+1)
+
+    #         self.user_embeddings[user_id] = {
+    #             "embedding": new_embedding.detach().cpu(),
+    #             "count": count+1
+    #         }
+
+    #     if user_id not in self.user_histories:
+    #         self.user_histories[user_id] = []
+
+    #     self.user_histories[user_id].append((item_idx, rating))
+
+    def build_user_embedding(self, user_id):
+        if user_id in self.user_embeddings:
+            cached = self.user_embeddings[user_id]
+            return cached["embedding"].to(self.device), cached["weight_sum"].to(self.device)
+
+        user_history    = self.user_histories[user_id][-50:]
+        history_items   = [x[0] for x in user_history]
+        history_ratings = [x[1] for x in user_history]
+
+        history_items_tensor   = torch.tensor(history_items,   dtype=torch.long).unsqueeze(0).to(self.device)
+        history_ratings_tensor = torch.tensor(history_ratings, dtype=torch.float32).unsqueeze(0).to(self.device)
+
+        with torch.inference_mode():
+            user_embedding, weight_sum = self.model.build_user_embedding(
+                history_items_tensor,
+                history_ratings_tensor
+            )
+
+        self.user_embeddings[user_id] = {
+            "embedding":  user_embedding.detach().cpu(),
+            "weight_sum": weight_sum.detach().cpu()
+        }
+
+        return user_embedding, weight_sum
+
+
+    def update_user_embedding(self, user_id, item_id, rating):
+        item_idx    = self.item_to_index[item_id]
+        item_tensor = torch.tensor([item_idx], dtype=torch.long).to(self.device)
+
+        # Get or build current embedding
+        user_embedding, weight_sum = self.build_user_embedding(user_id)
+
+        with torch.inference_mode():
+            user_embedding, weight_sum = self.model.update_user_embedding(
+                user_embedding,
+                weight_sum,
+                item_tensor,
+                rating
+            )
+
+        self.user_embeddings[user_id] = {
+            "embedding":  user_embedding.detach().cpu(),
+            "weight_sum": weight_sum.detach().cpu()
+        }
+
+        if user_id not in self.user_histories:
+            self.user_histories[user_id] = []
+
+        self.user_histories[user_id].append((item_idx, rating))
+
+    def save_user_embeddings(self, path):
+        with open(path, "wb") as f:
+            pickle.dump(
+                self.user_embeddings,
+                f
+            )
+
+    def predict_rating(self, user_id, item_id):
+        user_embedding, _ = self.build_user_embedding(user_id)
+        item_idx = self.item_to_index[item_id]
+
+        item_tensor = torch.tensor([item_idx],
+                                   dtype=torch.long).to(self.device)
+        
+        with torch.inference_mode():
+            prediction = self.model(user_embedding, item_tensor)
+        return prediction.item()
+    
+    def recommend_movies(self, user_id, top_k=10):
+        self.model.eval()
+
+        user_embedding, _ = self.build_user_embedding(user_id)
+        watched_movies = set([x[0] for x in self.user_histories[user_id]])
+
+        candidate_indices = [idx for idx in range(1, self.num_items) if idx not in watched_movies]
+
+        candidate_tensor = torch.tensor(candidate_indices, dtype=torch.long).to(self.device)
+
+        repeated_user_embedding = (user_embedding.repeat(len(candidate_indices), 1))
+
+        with torch.inference_mode():
+            predictions = self.model(repeated_user_embedding, candidate_tensor)
+
+            top_scores, top_positions = torch.topk(predictions, k=top_k)
+
+        recommendations = []
+
+        for score, position in zip(top_scores.cpu().numpy(),
+                                    top_positions.cpu().numpy()):
+            item_idx = candidate_indices[position]
+            item_id = self.index_to_item[item_idx]
+            recommendations.append({
+                "item_id": item_id,
+                "predicted_rating": float(score)
+            })
+
+        return recommendations
+    
+    def show_user_history(
+        self,
+        user_id,
+        top_n=20
+    ):
+        if user_id not in self.user_histories:
+            print("No history found for this user.")
+            return
+        
+        user_history = self.user_histories[user_id]
+
+        print("\nUSER HISTORY\n")
+
+        for item_idx, rating in user_history[-top_n:]:
+
+            item_id = self.index_to_item[item_idx]
+
+            print(
+                f"Rating: {rating:.1f} | {item_id}"
+            )
+    
+
+
+
+
+if __name__ == "__main__":
+    recommender = RecommenderSystem(
+    model_path="ml/models/best_dynamic_ncf_online.pth",
+    num_items=100456,
+    embedding_dim=32
+)
