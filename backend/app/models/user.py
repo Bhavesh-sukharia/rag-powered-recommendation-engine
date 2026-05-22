@@ -5,7 +5,19 @@ from pydantic import BaseModel, Field
 
 class User(BaseModel):
 	id: str | None = None
+
 	username: str
+
 	preferred_genres: list[str] = Field(default_factory=list)
-	ratings: list[dict] = Field(default_factory=list)  # List of dicts with movie_id and rating
+
+	ratings: list[dict] = Field(default_factory=list) # List of dicts with movie_id and rating
+
 	created_at: datetime = Field(default_factory=datetime.utcnow)
+
+	cf_embedding: list[float] | None = None
+
+	cf_weight_sum: float | None = None
+
+	embedding_version: int = 0
+
+	embedding_updated_at: datetime | None = None

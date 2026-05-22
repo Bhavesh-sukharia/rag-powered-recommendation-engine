@@ -3,6 +3,8 @@ User data repository.
 """
 from typing import Optional, Dict
 from bson import ObjectId
+import datetime
+
 
 
 class UserRepository:
@@ -130,4 +132,78 @@ class UserRepository:
             )
             return user
         except Exception:
+            return None
+        
+    from typing import Optional
+
+
+    async def get_user_embedding(self, user_id: str) -> Optional[dict]:
+
+        try:
+            user = await self.collection.find_one(
+                {"id": user_id},
+                {
+                    "cf_embedding": 1,
+                    "cf_weight_sum": 1,
+                    "embedding_version": 1
+                }
+            )
+
+            if user is None:
+                return None
+
+            return {
+                "embedding": user.get("cf_embedding"),
+                "weight_sum": user.get("cf_weight_sum"),
+                "embedding_version": user.get(
+                    "embedding_version",
+                    0
+                )
+            }
+
+        except Exception as e:
+            print(e)
+            return None
+        
+    async def save_user_embedding(self, user_id: str, embedding: list[float], weight_sum: float, embedding_version: int):
+
+        await self.collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {
+                "$set": {
+                    "cf_embedding": embedding,
+                    "cf_weight_sum": weight_sum,
+                    "embedding_version": embedding_version,
+                    "embedding_updated_at": datetime.datetime.now(datetime.timezone.utc)
+                }
+            }
+        )
+
+    async def get_embedding_version(
+        self,
+        user_id: str
+    ) -> int | None:
+
+        try:
+
+            user = await self.collection.find_one(
+                {"id": user_id},
+                {
+                    "embedding_version": 1
+                }
+            )
+
+            if user is None:
+                return None
+
+            version = user.get("embedding_version", 0)
+
+            try:
+                return int(version)
+
+            except (TypeError, ValueError):
+                return 0
+
+        except Exception as e:
+            print(e)
             return None

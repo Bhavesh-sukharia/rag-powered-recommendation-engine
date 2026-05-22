@@ -3,11 +3,20 @@ Configuration settings for the application.
 """
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+import os
+from pathlib import Path
+from typing import ClassVar
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+    PROJECT_ROOT: ClassVar[str] = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "../../.."
+        )
+    )
+
     # App
     APP_NAME: str = "intelligent-rec-rag"
     ENVIRONMENT: str = "development"
@@ -22,7 +31,8 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
     
     # Database
-    MONGODB_URL: str = "mongodb://localhost:27017"
+    # MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_URL: str = "mongodb+srv://bhavesh:bhavesh@cluster0.vrlh5wh.mongodb.net/"
     DATABASE_NAME: str = "recommendation_engine"
     
     # Redis
@@ -41,10 +51,25 @@ class Settings(BaseSettings):
     ITEM_FEATURES_PATH: str = "./data/processed/item_features.npz"
     ITEM_FEATURES_INDEX_PATH: str = "./data/processed/item_features_index.csv"
     USER_ITEM_MATRIX_PATH: str = "./data/processed/user_item_matrix.npz"
+    ITEM_TO_INDEX_PATH: str = os.path.join(
+        PROJECT_ROOT,
+        "ml",
+        "artifacts",
+        "item_to_index.pkl"
+    )
+
+    INDEX_TO_ITEM_PATH: str = os.path.join(
+        PROJECT_ROOT,
+        "ml",
+        "artifacts",
+        "index_to_item.pkl"
+    )
     
     class Config:
         env_file = ".env"
         case_sensitive = False
+
+
 
 
 @lru_cache()

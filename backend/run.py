@@ -3,7 +3,7 @@ Application entry point.
 """
 import uvicorn
 from app.core.config import get_settings
-
+from pathlib import Path
 
 if __name__ == "__main__":
     settings = get_settings()

@@ -7,6 +7,8 @@ from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.core.database import db
 from app.utils.logger import get_logger
+from app.services.cf_service import cf_recommender
+
 
 router = APIRouter(
     prefix="/api/users",
@@ -52,21 +54,98 @@ async def update_user(user_id: str, user_data: UserPreferencesRequest):
     return updated_user
 
 
-@router.post("/{user_id}/ratings")
-async def rate_movie(user_id: str, rating_data: UserRatingRequest):
-    """Create or update a rating for a movie on a user profile."""
-    repo = UserRepository(db)
-    user = await repo.get_user(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+# @router.post("/{user_id}/ratings")
+# async def rate_movie(user_id: str, rating_data: UserRatingRequest):
+#     """Create or update a rating for a movie on a user profile."""
+#     repo = UserRepository(db)
+#     user = await repo.get_user(user_id)
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
 
+#     updated_user = await repo.update_user_rating(
+#         user_id,
+#         rating_data.item_id,
+#         rating_data.rating_number,
+#     )
+#     if not updated_user:
+#         raise HTTPException(status_code=400, detail="Failed to save rating")
+
+#     logger.info(
+#         "Saved rating for user_id=%s item_id=%s rating_number=%s",
+#         user_id,
+#         rating_data.item_id,
+#         rating_data.rating_number,
+#     )
+#     return {
+#         "message": "Rating saved successfully",
+#         "user_id": updated_user["id"],
+#         "item_id": rating_data.item_id,
+#         "rating_number": rating_data.rating_number,
+#         "ratings": updated_user.get("ratings", []),
+#     }
+
+@router.post("/{user_id}/ratings")
+async def rate_movie(
+    user_id: str,
+    rating_data: UserRatingRequest
+):
+    """Create or update a rating for a movie on a user profile."""
+
+    repo = UserRepository(db)
+
+    user = await repo.get_user(user_id)
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    
+    current_version = await repo.get_embedding_version(user_id)
+
+    if current_version is None:
+        current_version = 0
+
+    CURRENT_EMBEDDING_VERSION = current_version + 1
+    # Save rating
     updated_user = await repo.update_user_rating(
         user_id,
         rating_data.item_id,
         rating_data.rating_number,
     )
+
     if not updated_user:
-        raise HTTPException(status_code=400, detail="Failed to save rating")
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to save rating"
+        )
+
+    # Rebuild embedding from updated history
+    rating_history = updated_user.get("ratings", [])
+
+    if len(rating_history) > 0:
+
+        user_embedding, weight_sum = (
+            cf_recommender.build_user_embedding_from_history(
+                user_id,
+                rating_history
+            )
+        )
+        logger.info("user embedding in routes/users.py: %s", user_embedding)
+
+        payload = cf_recommender.tensor_to_embedding_payload(
+            user_embedding,
+            weight_sum
+        )
+
+        logger.info("Payload embedding in routes/users.py: %s", payload["embedding"])
+
+        await repo.save_user_embedding(
+            user_id=user_id,
+            embedding=payload["embedding"],
+            weight_sum=payload["weight_sum"],
+            embedding_version=CURRENT_EMBEDDING_VERSION
+        )
 
     logger.info(
         "Saved rating for user_id=%s item_id=%s rating_number=%s",
@@ -74,6 +153,7 @@ async def rate_movie(user_id: str, rating_data: UserRatingRequest):
         rating_data.item_id,
         rating_data.rating_number,
     )
+
     return {
         "message": "Rating saved successfully",
         "user_id": updated_user["id"],

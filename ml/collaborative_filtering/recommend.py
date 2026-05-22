@@ -1,5 +1,5 @@
 import pickle
-from model import RecommenderSystem
+from model import CF_RecommenderSystem
 
 with open("ml/artifacts/item_to_index.pkl", "rb") as f:
     item_to_index = pickle.load(f)
@@ -12,7 +12,7 @@ with open("ml/artifacts/user_histories.pkl", "rb") as f:
 
 num_items = len(item_to_index) + 1
 
-recommender = RecommenderSystem(
+recommender = CF_RecommenderSystem(
 
     model_path="ml/models/best_dynamic_ncf_online_debug.pth",
 

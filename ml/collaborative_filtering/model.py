@@ -155,7 +155,7 @@ class DynamicNCF(nn.Module):
         x = torch.cat([user_embedding, target_embedding], dim=1)
         return 5.0 * torch.sigmoid(self.mlp(x).squeeze())    
 
-class RecommenderSystem:
+class CF_RecommenderSystem:
     def __init__(
             self, 
             model_path,
@@ -293,6 +293,79 @@ class RecommenderSystem:
         }
 
         return user_embedding, weight_sum
+    
+    # def build_user_embedding_from_history(self, user_id, rating_history):
+    #     user_history = rating_history[-50:]
+    #     history_items = [x[0] for x in user_history]
+    #     history_ratings = [x[1] for x in user_history]
+
+    #     history_items_tensor   = torch.tensor(history_items,   dtype=torch.long).unsqueeze(0).to(self.device)
+    #     history_ratings_tensor = torch.tensor(history_ratings, dtype=torch.float32).unsqueeze(0).to(self.device)
+        
+    #     with torch.inference_mode():
+    #         user_embedding, weight_sum = self.model.build_user_embedding(
+    #             history_items_tensor,
+    #             history_ratings_tensor
+    #         )
+
+    #     return user_embedding, weight_sum
+
+    def build_user_embedding_from_history(
+        self,
+        user_id,
+        rating_history
+    ):
+        user_history = rating_history[-50:]
+
+        valid_history = [
+            x for x in user_history
+            if x["item_id"] in self.item_to_index
+        ]
+
+        if len(valid_history) == 0:
+            raise ValueError(
+                "No valid movies found in rating history."
+            )
+
+        history_items = [
+            self.item_to_index[x["item_id"]]
+            for x in valid_history
+        ]
+
+        history_ratings = [
+            float(x["rating_number"])
+            for x in valid_history
+        ]
+
+        history_items_tensor = (
+            torch.tensor(
+                history_items,
+                dtype=torch.long
+            )
+            .unsqueeze(0)
+            .to(self.device)
+        )
+
+        history_ratings_tensor = (
+            torch.tensor(
+                history_ratings,
+                dtype=torch.float32
+            )
+            .unsqueeze(0)
+            .to(self.device)
+        )
+
+        with torch.inference_mode():
+            user_embedding, weight_sum = (
+                self.model.build_user_embedding(
+                    history_items_tensor,
+                    history_ratings_tensor
+                )
+            )
+
+        print(user_embedding)
+
+        return user_embedding, weight_sum
 
 
     def update_user_embedding(self, user_id, item_id, rating):
@@ -327,6 +400,20 @@ class RecommenderSystem:
                 f
             )
 
+    def tensor_to_embedding_payload(self, embedding, weight_sum):
+        return {
+            "embedding": (embedding.squeeze(0).detach().cpu().tolist()),
+
+            "weight_sum": float(weight_sum.item())
+        }
+    
+    def embedding_payload_to_tensor(self, embedding, weight_sum):
+        return {
+            "embedding": torch.tensor(embedding, dtype=torch.long).to(self.device),
+
+            "weight_sum": torch.tensor(weight_sum, dtype=torch.long).to(self.device)
+        }
+
     def predict_rating(self, user_id, item_id):
         user_embedding, _ = self.build_user_embedding(user_id)
         item_idx = self.item_to_index[item_id]
@@ -338,21 +425,30 @@ class RecommenderSystem:
             prediction = self.model(user_embedding, item_tensor)
         return prediction.item()
     
-    def recommend_movies(self, user_id, top_k=10):
+    def predict_at_once(self, user_id, rating_history, candidate_indices):
         self.model.eval()
+        user_embedding, _ = self.build_user_embedding_from_history(user_id, rating_history)
 
-        user_embedding, _ = self.build_user_embedding(user_id)
+        candidate_tensors = torch.tensor(candidate_indices, dtype=torch.long).to(self.device)
+
+        repeated_user_embedding = user_embedding.repeat(len(candidate_indices), 1)
+
+        with torch.inference_mode():
+            predictions = self.model(repeated_user_embedding, candidate_tensors)
+            print(len(predictions))
+            print(predictions)
+           
+
+        return predictions
+    
+    def recommend_movies(self, user_id, rating_history, top_k=10):
         watched_movies = set([x[0] for x in self.user_histories[user_id]])
 
         candidate_indices = [idx for idx in range(1, self.num_items) if idx not in watched_movies]
+        print(len(candidate_indices))
 
-        candidate_tensor = torch.tensor(candidate_indices, dtype=torch.long).to(self.device)
-
-        repeated_user_embedding = (user_embedding.repeat(len(candidate_indices), 1))
-
+        predictions = self.predict_at_once(user_id, rating_history, candidate_indices)
         with torch.inference_mode():
-            predictions = self.model(repeated_user_embedding, candidate_tensor)
-
             top_scores, top_positions = torch.topk(predictions, k=top_k)
 
         recommendations = []
@@ -394,7 +490,7 @@ class RecommenderSystem:
 
 
 if __name__ == "__main__":
-    recommender = RecommenderSystem(
+    recommender = CF_RecommenderSystem(
     model_path="ml/models/best_dynamic_ncf_online.pth",
     num_items=100456,
     embedding_dim=32
