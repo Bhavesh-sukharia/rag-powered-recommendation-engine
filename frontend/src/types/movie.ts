@@ -7,9 +7,5 @@ export interface Movie {
   avg_rating?: number | null;
   rating_number?: number | null;
   created_at?: string;
-  emoji?: string;
-  sentiment?: number;
-  aspects?: string[];
-  cf_base?: number;
-  cb_tags?: string[];
+  sentiment_label?: string | null;
 }

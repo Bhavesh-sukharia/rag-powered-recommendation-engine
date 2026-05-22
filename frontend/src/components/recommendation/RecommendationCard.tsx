@@ -44,7 +44,9 @@ export default function RecommendationCard({
           <div className='mt-5 grid grid-cols-4 gap-3'>
             <ScoreBox label='CF Score' value={recommendation.cfScore} />
             <ScoreBox label='CB Score' value={recommendation.cbScore} />
-            <SentimentBox score={recommendation.sentimentScore} />
+            <SentimentBox
+              label={ recommendation.movie.sentiment_label ?? null}
+            />
             <ScoreBox
               label='Avg Use Rating'
               value={averageUserRating}
@@ -101,8 +103,7 @@ function ScoreBox({
   );
 }
 
-function SentimentBox({ score }: { score: number }) {
-  const label = score >= 0.66 ? 'Highly praised' : score >= 0.34 ? 'Mixed Reviews' : 'Less Appreciated';
+function SentimentBox({ label }: { label: string | null }) {
 
   return (
     <div className='rounded-xl bg-muted p-3'>

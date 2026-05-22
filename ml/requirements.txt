@@ -1,3 +1,10 @@
+# PyTorch with CUDA 12.1 support (recommend installing via conda)
+# For pip: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+torch>=2.6
+torchvision
+torchaudio
+
+# Other dependencies
 numpy>=1.25
 pandas>=2.0
 scikit-learn>=1.2
@@ -8,7 +15,6 @@ jupyter>=1.0
 sentence-transformers>=3.0
 faiss-cpu>=1.8
 transformers>=4.41
-torch>=2.2
 spacy>=3.7
 keybert>=0.8
 chromadb>=0.5
