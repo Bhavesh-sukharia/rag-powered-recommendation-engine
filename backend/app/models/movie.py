@@ -11,4 +11,5 @@ class Movie(BaseModel):
 	overview: str | None = None
 	avg_rating: float | None = 0.0
 	rating_number: int | None = 0
+	sentiment_label: str | None = None
 	created_at: datetime = Field(default_factory=datetime.utcnow)

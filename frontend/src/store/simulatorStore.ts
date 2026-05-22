@@ -27,11 +27,12 @@ interface BackendRecommendation {
     item_id: number;
     title: string;
     genres?: string[];
+    avg_rating?: number | null;
+    sentiment_label?: string | null;
   };
   combined_score: number;
   cb_score?: number;
   cf_score?: number;
-  sentiment_score?: number;
 }
 
 interface BackendMovie {
@@ -43,6 +44,7 @@ interface BackendMovie {
   avg_rating?: number | null;
   rating_number?: number | null;
   created_at?: string;
+  sentiment_label?: string | null;
 }
 
 interface BackendMovieSearchResponse {
@@ -87,6 +89,7 @@ function mapMovieFromApi(movie: BackendMovie, index: number): Movie {
     avg_rating: movie.avg_rating ?? null,
     rating_number: movie.rating_number ?? null,
     created_at: movie.created_at,
+    sentiment_label: movie.sentiment_label ?? null,
   };
 }
 
@@ -677,7 +680,7 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
     const state = get();
     const activeUser = state.users.find((user) => user.id === state.activeUserId);
     const w = state.weights ?? { cf: 50, cb: 50 };
-    const options = state.options ?? { sentimentRerank: true, ragExplanation: true };
+    const options = state.options ?? { sentimentRerank: false, ragExplanation: true };
 
     if (!activeUser) {
       set({ recommendations: [] });
@@ -696,23 +699,19 @@ export const useSimulatorStore = create<SimulatorStore>((set, get) => ({
       );
 
       const payload = response.data;
-      const catalogMovies = get().movies;
       const recommendations = (payload.recommendations ?? []).map((item) => {
-        const movieFromCatalog = catalogMovies.find((movie) => movie.id === item.movie.item_id);
         const title = item.movie.title;
 
         return {
           movie: {
             id: item.movie.item_id,
             title,
-            genres: item.movie.genres ?? movieFromCatalog?.genres ?? [],
-            overview: movieFromCatalog?.overview ?? null,
-            avg_rating: movieFromCatalog?.avg_rating ?? null,
-            rating_number: movieFromCatalog?.rating_number ?? null,
+            genres: item.movie.genres ?? [],
+            avg_rating: item.movie.avg_rating ?? null,
+            sentiment_label: item.movie.sentiment_label ?? null,
           },
           cfScore: item.cf_score ?? 0,
           cbScore: item.cb_score ?? 0,
-          sentimentScore: item.sentiment_score ?? 0,
           finalScore: item.combined_score,
           ragExplanation: options.ragExplanation
             ? `Because you like ${title} and similar genres.`

@@ -116,12 +116,6 @@ async def get_weighted_recommendations(request: RecommendationRequest):
             )
             recommendations.append(rec)
     
-    logger.info(
-        "Returned %d recommendations for user=%s",
-        len(recommendations),
-        request.username,
-    )
-    
     return {
         "username": request.username,
         "recommendations": recommendations,
