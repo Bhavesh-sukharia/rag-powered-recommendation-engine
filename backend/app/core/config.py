@@ -31,8 +31,7 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
     
     # Database
-    # MONGODB_URL: str = "mongodb://localhost:27017"
-    MONGODB_URL: str = "mongodb+srv://bhavesh:bhavesh@cluster0.vrlh5wh.mongodb.net/"
+    MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "recommendation_engine"
     
     # Redis
