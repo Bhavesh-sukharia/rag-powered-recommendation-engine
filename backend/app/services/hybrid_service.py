@@ -51,48 +51,31 @@ INDEX_TO_ITEM_PATH = os.path.join(
     "index_to_item.pkl"
 )
 
-USER_HISTORIES_PATH = os.path.join(
-    PROJECT_ROOT,
-    "ml",
-    "artifacts",
-    "user_histories.pkl"
-)
-
 
 class HybridService:
 
     def __init__(self):
 
-        self.recommender = (
-            HybridRecommenderSystem(
+        self.recommender = HybridRecommenderSystem(
+                                model_path=MODEL_PATH,
 
-                model_path=MODEL_PATH,
+                                item_to_index_path=ITEM_TO_INDEX_PATH,
 
-                item_to_index_path=ITEM_TO_INDEX_PATH,
+                                index_to_item_path=INDEX_TO_ITEM_PATH,
 
-                index_to_item_path=INDEX_TO_ITEM_PATH,
-
-                user_histories_path=USER_HISTORIES_PATH,
-
-                embedding_dim=32
-            )
-        )
+                                embedding_dim=32
+                            )
 
     # =====================================
     # Get Recommendations
     # =====================================
 
-    def get_recommendations(
-        self,
-        user_id,
-        rating_history,
-        alpha=0.5,
-        count=20
-    ):
+    def get_recommendations(self, user_id, user_embedding, rating_history, alpha=0.5, count=20):
 
         recommendations = (
             self.recommender.recommend(
                 user_id=user_id,
+                user_embedding=user_embedding,
                 rating_history=rating_history,
                 alpha=alpha,
                 top_k=count

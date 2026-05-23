@@ -78,5 +78,4 @@ cf_recommender = CF_RecommenderSystem(
     num_items=99224,
     item_to_index=ITEM_TO_INDEX,
     index_to_item=INDEX_TO_ITEM,
-    user_histories=None
 )

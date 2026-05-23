@@ -30,6 +30,7 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+ml/artifacts/user_histories.pkl
 
 # Python build outputs
 .coverage
@@ -39,3 +40,4 @@ htmlcov/
 # OS files
 Thumbs.db
 desktop.ini
+.vscode/settings.json

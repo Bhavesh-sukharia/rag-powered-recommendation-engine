@@ -51,10 +51,10 @@ async def get_weighted_recommendations(request: RecommendationRequest):
         raise HTTPException(status_code=404, detail=f"User '{request.username}' not found")
     
     user_id = user["_id"]
-    ratings = user["ratings"]
-    embedding = user["cf_embedding"]
+    rating_history = user["ratings"]
+    user_embedding = user["cf_embedding"]
     logger.info(user_id)
-    logger.info("user_embedding: %s", embedding)
+    logger.info("user_embedding: %s", user_embedding)
     
     logger.info(
         "Getting weighted recommendations for user=%s with weights: cb=%s, cf=%s",
@@ -102,11 +102,43 @@ async def get_weighted_recommendations(request: RecommendationRequest):
     # =========================================
     # Hybrid Recommendations
     # =========================================
+    if not rating_history or user_embedding is None:  
+        logger.info(
+            "Cold start user detected: %s",
+            request.username
+        )
+
+        top_movies = await movie_repo.get_top_rated_movies(limit=count)
+
+        recommendations = []
+
+        for movie_data in top_movies:
+
+            movie_data["id"] = str(
+                movie_data.get("_id")
+            )
+
+            movie_data.pop("_id", None)
+
+            recommendations.append(
+                MovieRecommendation(
+                    movie=Movie(**movie_data),
+                    combined_score=float(movie_data.get("vote_average", 0)),
+                    cb_score=0.0,
+                    cf_score=0.0,
+                )
+            )
+
+        return {
+            "username": request.username,
+            "recommendations": recommendations,
+        }     
 
     hybrid_results = (
         hybrid_service.get_recommendations(
             user_id=user_id,
-            rating_history=ratings,
+            user_embedding=user_embedding,
+            rating_history=rating_history,
             alpha=request.cf_weight,
             count=count
         )

@@ -125,18 +125,11 @@ async def rate_movie(
 
     if len(rating_history) > 0:
 
-        user_embedding, weight_sum = (
-            cf_recommender.build_user_embedding_from_history(
-                user_id,
-                rating_history
-            )
-        )
+        user_embedding, weight_sum = cf_recommender.build_user_embedding_from_history(rating_history)
+
         logger.info("user embedding in routes/users.py: %s", user_embedding)
 
-        payload = cf_recommender.tensor_to_embedding_payload(
-            user_embedding,
-            weight_sum
-        )
+        payload = cf_recommender.tensor_to_embedding_payload(user_embedding, weight_sum)
 
         logger.info("Payload embedding in routes/users.py: %s", payload["embedding"])
 

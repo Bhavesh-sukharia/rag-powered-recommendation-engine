@@ -210,3 +210,13 @@ class MovieRepository:
             return int(count)
         except Exception:
             return 0
+
+    async def get_top_rated_movies(self, limit=20):
+        cursor = (
+            self.collection
+            .find({})
+            .sort("vote_average", -1)
+            .limit(limit)
+        )
+
+        return await cursor.to_list(length=limit)
